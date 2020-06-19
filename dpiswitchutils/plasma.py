@@ -123,13 +123,51 @@ def plasmashell_config_read_get_panel_info():
     return res
 
 
+def get_plasma_version():
+    try:
+        output = subprocess.check_output(['plasmashell',
+                                          '--version']).decode('UTF-8').strip()
+        _, version = output.split()
+        return version
+    except subprocess.CalledProcessError as e:
+        print("Error in plasmashell --version:\n", e.output)
+        return None
+
+
+def is_plasma_version_lower_than_5_18():
+    def splitted(s):
+        return tuple(int(x) for x in s.split('.'))
+    return splitted(get_plasma_version()) < splitted('5.18')
+
+
+
 def read_current_profile():
-    conf = safe_read_ini(CONFIG_STARTUP)
+    if is_plasma_version_lower_than_5_18():
+        conf = safe_read_ini(CONFIG_STARTUP)
+        scaling = font_dpi_to_scale_factor(
+            int(conf.get(SECTION_ROOT, 'kcmfonts_general_forcefontdpi'))
+        )
+        size = try_parse_int(
+            conf.get(SECTION_ROOT, 'kcminputrc_mouse_cursorsize'), 24
+        )
+    else:
+        def get_int_or_float(v):
+                number_as_float = float(v)
+                number_as_int = int(number_as_float)
+                return (number_as_int
+                        if number_as_float == number_as_int
+                        else number_as_float)
+        scaling = get_int_or_float(
+            safe_read_ini(CONFIG_KDEGLOBALS).get('KScreen', 'ScaleFactor')
+        )
+        size = try_parse_int(
+            safe_read_ini(CONFIG_KCMINPUT).getint('Mouse', 'cursorSize'), 24
+        )
 
     return {
-        "scaling": font_dpi_to_scale_factor(int(conf.get(SECTION_ROOT, 'kcmfonts_general_forcefontdpi'))),
+        "scaling": scaling,
         "cursor": {
-            "size": try_parse_int(conf.get(SECTION_ROOT, 'kcminputrc_mouse_cursorsize'), 24)
+            "size": size
         },
         "panels": plasmashell_config_read_get_panel_info(),
         "widgets": []
